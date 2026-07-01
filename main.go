@@ -1,5 +1,5 @@
 // twMQTTAgent - A lightweight, cross-platform system monitoring agent.
-// It collects system metrics (CPU, Memory, Disk) and publishes them
+// It collects system metrics (CPU, Memory, Load, Network, Processes) and publishes them
 // to an MQTT broker in JSON format, designed for the TWSNMP series.
 package main
 
@@ -15,100 +15,94 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/shirou/gopsutil/v4/cpu"
-	"github.com/shirou/gopsutil/v4/disk"
+	"github.com/shirou/gopsutil/v4/load"
 	"github.com/shirou/gopsutil/v4/mem"
+	gopsnet "github.com/shirou/gopsutil/v4/net"
+	"github.com/shirou/gopsutil/v4/process"
 )
 
-// MemoryMetrics holds memory usage statistics.
-type MemoryMetrics struct {
-	TotalGB float64 `json:"total_gb"`
-	UsedGB  float64 `json:"used_gb"`
-	FreeGB  float64 `json:"free_gb"`
-	Percent float64 `json:"percent"`
-}
+var lastMonitorTime int64
+var lastBytesRecv uint64
+var lastBytesSent uint64
 
-// DiskMetrics holds disk usage statistics.
-type DiskMetrics struct {
-	TotalGB float64 `json:"total_gb"`
-	UsedGB  float64 `json:"used_gb"`
-	FreeGB  float64 `json:"free_gb"`
-	Percent float64 `json:"percent"`
+type mqttMonitorDataEnt struct {
+	Time    string  `json:"time"`
+	Host    string  `json:"host"`
+	CPU     float64 `json:"cpu"`
+	Memory  float64 `json:"memory"`
+	Load    float64 `json:"load"`
+	Sent    uint64  `json:"sent"`
+	Recv    uint64  `json:"recv"`
+	TxSpeed float64 `json:"tx_speed"`
+	RxSpeed float64 `json:"rx_speed"`
+	Process int     `json:"process"`
 }
-
-// Metrics holds all collected system metrics.
-type Metrics struct {
-	CPUPercent float64       `json:"cpu_percent"`
-	Memory     MemoryMetrics `json:"memory"`
-	Disk       DiskMetrics   `json:"disk"`
-}
-
-// Payload is the top-level JSON structure published to the MQTT broker.
-type Payload struct {
-	Hostname  string  `json:"hostname"`
-	Timestamp int64   `json:"timestamp"`
-	Status    string  `json:"status"`
-	Metrics   Metrics `json:"metrics"`
-}
-
-const gbDivisor = 1024 * 1024 * 1024
 
 // collectMetrics gathers current system metrics.
-func collectMetrics() (Metrics, error) {
-	var m Metrics
+func collectMetrics(hostname string) (mqttMonitorDataEnt, error) {
+	var m mqttMonitorDataEnt
+	m.Time = time.Now().Format(time.RFC3339)
+	m.Host = hostname
 
-	// CPU: measure over 1 second interval for accuracy
-	cpuPercents, err := cpu.Percent(time.Second, false)
+	// CPU
+	cpus, err := cpu.Percent(0, false)
 	if err != nil {
 		return m, fmt.Errorf("cpu.Percent: %w", err)
 	}
-	if len(cpuPercents) > 0 {
-		m.CPUPercent = roundFloat(cpuPercents[0], 1)
+	if len(cpus) > 0 {
+		m.CPU = cpus[0]
 	}
+
+	// Load
+	loads, err := load.Avg()
+	if err != nil {
+		return m, fmt.Errorf("load.Avg: %w", err)
+	}
+	m.Load = loads.Load1
 
 	// Memory
 	vmStat, err := mem.VirtualMemory()
 	if err != nil {
 		return m, fmt.Errorf("mem.VirtualMemory: %w", err)
 	}
-	m.Memory = MemoryMetrics{
-		TotalGB: roundFloat(float64(vmStat.Total)/gbDivisor, 1),
-		UsedGB:  roundFloat(float64(vmStat.Used)/gbDivisor, 1),
-		FreeGB:  roundFloat(float64(vmStat.Free)/gbDivisor, 1),
-		Percent: roundFloat(vmStat.UsedPercent, 1),
+	m.Memory = vmStat.UsedPercent
+
+	// Net
+	nets, err := gopsnet.IOCounters(false)
+	if err != nil {
+		return m, fmt.Errorf("net.IOCounters: %w", err)
+	}
+	if len(nets) > 0 {
+		now := time.Now().Unix()
+		if lastMonitorTime > 0 {
+			diff := now - lastMonitorTime
+			if diff > 0 {
+				dSent := nets[0].BytesSent - lastBytesSent
+				dRecv := nets[0].BytesRecv - lastBytesRecv
+				rxSpeed := 8.0 * float64(dRecv) / float64(diff)
+				rxSpeed /= (1000 * 1000)
+				txSpeed := 8.0 * float64(dSent) / float64(diff)
+				txSpeed /= (1000 * 1000)
+
+				m.Recv = dRecv
+				m.Sent = dSent
+				m.TxSpeed = txSpeed
+				m.RxSpeed = rxSpeed
+			}
+		}
+		lastMonitorTime = now
+		lastBytesRecv = nets[0].BytesRecv
+		lastBytesSent = nets[0].BytesSent
 	}
 
-	// Disk (root partition)
-	diskStat, err := disk.Usage("/")
+	// Processes
+	pids, err := process.Pids()
 	if err != nil {
-		return m, fmt.Errorf("disk.Usage: %w", err)
+		return m, fmt.Errorf("process.Pids: %w", err)
 	}
-	m.Disk = DiskMetrics{
-		TotalGB: roundFloat(float64(diskStat.Total)/gbDivisor, 1),
-		UsedGB:  roundFloat(float64(diskStat.Used)/gbDivisor, 1),
-		FreeGB:  roundFloat(float64(diskStat.Free)/gbDivisor, 1),
-		Percent: roundFloat(diskStat.UsedPercent, 1),
-	}
+	m.Process = len(pids)
 
 	return m, nil
-}
-
-// roundFloat rounds a float64 to d decimal places.
-func roundFloat(val float64, d int) float64 {
-	factor := 1.0
-	for i := 0; i < d; i++ {
-		factor *= 10
-	}
-	return float64(int(val*factor+0.5)) / factor
-}
-
-// buildPayload constructs the JSON payload.
-func buildPayload(hostname string, metrics Metrics) Payload {
-	return Payload{
-		Hostname:  hostname,
-		Timestamp: time.Now().Unix(),
-		Status:    "online",
-		Metrics:   metrics,
-	}
 }
 
 // connectMQTT establishes an MQTT connection and returns the client.
@@ -144,13 +138,13 @@ func connectMQTT(broker, clientID, user, password string) (mqtt.Client, error) {
 
 func main() {
 	// --- CLI Flags ---
-	broker    := flag.String("broker",    "tcp://localhost:1883", "MQTT broker URL (e.g., tcp://host:1883)")
-	clientID  := flag.String("client-id", "twMQTTAgent",         "MQTT client ID")
-	baseTopic := flag.String("topic",     "twsnmp/agent",        "Base MQTT topic; hostname is appended automatically (e.g., twsnmp/agent/<hostname>)")
-	interval  := flag.Int("interval",     30,                    "Publish interval in seconds")
-	user      := flag.String("user",      "",                    "MQTT username (optional)")
-	password  := flag.String("password",  "",                    "MQTT password (optional)")
-	hostFlag  := flag.String("hostname",  "",                    "Hostname used in topic and payload; defaults to system hostname if empty")
+	broker := flag.String("broker", "tcp://localhost:1883", "MQTT broker URL (e.g., tcp://host:1883)")
+	clientID := flag.String("client-id", "twMQTTAgent", "MQTT client ID")
+	baseTopic := flag.String("topic", "twMQTTAgent", "Base MQTT topic; hostname is appended automatically (e.g., twMQTTAgent/Monitor/<hostname>)")
+	interval := flag.Int("interval", 30, "Publish interval in seconds")
+	user := flag.String("user", "", "MQTT username (optional)")
+	password := flag.String("password", "", "MQTT password (optional)")
+	hostFlag := flag.String("hostname", "", "Hostname used in topic and payload; defaults to system hostname if empty")
 	flag.Parse()
 
 	// Resolve effective hostname: CLI flag takes precedence over system hostname.
@@ -163,7 +157,7 @@ func main() {
 	}
 
 	// Build the full topic by appending the hostname.
-	topic := *baseTopic + "/" + hostname
+	topic := *baseTopic + "/Monitor/" + hostname
 
 	log.Printf("[INFO] twMQTTAgent starting — hostname=%s broker=%s topic=%s interval=%ds",
 		hostname, *broker, topic, *interval)
@@ -183,14 +177,13 @@ func main() {
 
 	// Publish immediately on startup, then on each tick.
 	publish := func() {
-		metrics, err := collectMetrics()
+		mqttData, err := collectMetrics(hostname)
 		if err != nil {
 			log.Printf("[ERROR] Failed to collect metrics: %v", err)
 			return
 		}
 
-		payload := buildPayload(hostname, metrics)
-		data, err := json.Marshal(payload)
+		data, err := json.Marshal(mqttData)
 		if err != nil {
 			log.Printf("[ERROR] Failed to marshal payload: %v", err)
 			return
@@ -202,8 +195,8 @@ func main() {
 			log.Printf("[ERROR] Failed to publish message: %v", err)
 			return
 		}
-		log.Printf("[INFO] Published: cpu=%.1f%% mem=%.1f%% disk=%.1f%%",
-			metrics.CPUPercent, metrics.Memory.Percent, metrics.Disk.Percent)
+		log.Printf("[INFO] Published: cpu=%.1f%% mem=%.1f%% load=%.3f process=%d txSpeed=%.3f rxSpeed=%.3f",
+			mqttData.CPU, mqttData.Memory, mqttData.Load, mqttData.Process, mqttData.TxSpeed, mqttData.RxSpeed)
 	}
 
 	publish()

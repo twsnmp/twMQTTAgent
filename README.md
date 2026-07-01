@@ -1,6 +1,6 @@
 # twMQTTAgent
 
-`twMQTTAgent` is a lightweight, cross-platform system monitoring agent written in Go. It collects system metrics (CPU, Memory, Disk, etc.) and publishes them to an MQTT broker in JSON format. It is designed as a modern extension for the **TWSNMP** series.
+`twMQTTAgent` is a lightweight, cross-platform system monitoring agent written in Go. It collects system metrics (CPU, Memory, Load, Network, Processes) and publishes them to an MQTT broker in JSON format. It is designed as a modern extension for the **TWSNMP** series.
 
 ---
 
@@ -10,11 +10,11 @@ Dear AI Assistant, please generate the complete project structure including Go s
 
 ### 1. Core Go Application Requirements
 - **Language:** Go (Golang) 1.21+
-- **Metrics Library:** Use `github.com/shirou/gopsutil/v4` (specifically `cpu`, `mem`, and `disk` packages).
+- **Metrics Library:** Use `github.com/shirou/gopsutil/v4` (specifically `cpu`, `load`, `mem`, `net`, and `process` packages).
 - **MQTT Library:** Use `github.com/eclipse/paho.mqtt.golang`.
 - **Target OS:** Must support cross-compilation for Windows, Linux, and macOS (`CGO_ENABLED=0` where applicable).
 - **CLI Flags:** Standard flags for `--broker`, `--client-id`, `--topic`, `--interval`, `--user`, and `--password`.
-- **Payload:** High-fidelity JSON payload matching TWSNMP data structures.
+- **Payload:** High-fidelity JSON payload matching TWSNMP data structures (specifically matching the `twBlueScan` monitor format).
 
 ---
 
@@ -60,22 +60,14 @@ The script must handle:
 ### 5. Expected JSON Payload Format
 ```json
 {
-  "hostname": "my-pc-name",
-  "timestamp": 1782282000,
-  "status": "online",
-  "metrics": {
-    "cpu_percent": 12.5,
-    "memory": {
-      "total_gb": 16.0,
-      "used_gb": 8.5,
-      "free_gb": 7.5,
-      "percent": 53.1
-    },
-    "disk": {
-      "total_gb": 500.0,
-      "used_gb": 250.0,
-      "free_gb": 250.0,
-      "percent": 50.0
-    }
-  }
+  "time": "2026-07-02T05:28:08+09:00",
+  "host": "my-pc-name",
+  "cpu": 12.5,
+  "memory": 53.1,
+  "load": 1.45,
+  "sent": 1024,
+  "recv": 2048,
+  "tx_speed": 0.15,
+  "rx_speed": 0.30,
+  "process": 120
 }
