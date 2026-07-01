@@ -144,21 +144,29 @@ func connectMQTT(broker, clientID, user, password string) (mqtt.Client, error) {
 
 func main() {
 	// --- CLI Flags ---
-	broker   := flag.String("broker",    "tcp://localhost:1883", "MQTT broker URL (e.g., tcp://host:1883)")
-	clientID := flag.String("client-id", "twMQTTAgent",         "MQTT client ID")
-	topic    := flag.String("topic",     "twsnmp/agent",        "MQTT topic to publish metrics to")
-	interval := flag.Int("interval",     30,                    "Publish interval in seconds")
-	user     := flag.String("user",      "",                    "MQTT username (optional)")
-	password := flag.String("password",  "",                    "MQTT password (optional)")
+	broker    := flag.String("broker",    "tcp://localhost:1883", "MQTT broker URL (e.g., tcp://host:1883)")
+	clientID  := flag.String("client-id", "twMQTTAgent",         "MQTT client ID")
+	baseTopic := flag.String("topic",     "twsnmp/agent",        "Base MQTT topic; hostname is appended automatically (e.g., twsnmp/agent/<hostname>)")
+	interval  := flag.Int("interval",     30,                    "Publish interval in seconds")
+	user      := flag.String("user",      "",                    "MQTT username (optional)")
+	password  := flag.String("password",  "",                    "MQTT password (optional)")
+	hostFlag  := flag.String("hostname",  "",                    "Hostname used in topic and payload; defaults to system hostname if empty")
 	flag.Parse()
 
+	// Resolve effective hostname: CLI flag takes precedence over system hostname.
 	hostname, err := os.Hostname()
 	if err != nil {
-		log.Fatalf("[FATAL] Failed to get hostname: %v", err)
+		log.Fatalf("[FATAL] Failed to get system hostname: %v", err)
+	}
+	if *hostFlag != "" {
+		hostname = *hostFlag
 	}
 
+	// Build the full topic by appending the hostname.
+	topic := *baseTopic + "/" + hostname
+
 	log.Printf("[INFO] twMQTTAgent starting — hostname=%s broker=%s topic=%s interval=%ds",
-		hostname, *broker, *topic, *interval)
+		hostname, *broker, topic, *interval)
 
 	client, err := connectMQTT(*broker, *clientID, *user, *password)
 	if err != nil {
@@ -188,7 +196,7 @@ func main() {
 			return
 		}
 
-		token := client.Publish(*topic, 0, false, data)
+		token := client.Publish(topic, 0, false, data)
 		token.Wait()
 		if err := token.Error(); err != nil {
 			log.Printf("[ERROR] Failed to publish message: %v", err)
