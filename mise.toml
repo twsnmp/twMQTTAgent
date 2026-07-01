@@ -1,0 +1,37 @@
+[tools]
+go = "1.26"
+
+[tasks]
+
+# Run the agent locally for testing.
+# Requires a running MQTT broker (e.g., mosquitto on localhost:1883).
+[tasks.run]
+description = "Run twMQTTAgent locally for testing"
+run = "go run . --broker tcp://localhost:1883 --interval 10"
+
+# Build the binary for the current host architecture.
+[tasks."build:local"]
+description = "Build binary for the current host architecture"
+run = "go build -o twMQTTAgent ."
+
+# Cross-compile for all supported platforms.
+[tasks."build:all"]
+description = "Build binaries for all target platforms"
+depends = ["build:linux-amd64", "build:linux-arm64", "build:windows-amd64"]
+
+[tasks."build:linux-amd64"]
+description = "Build for Linux amd64"
+run = "CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o dist/twMQTTAgent-linux-amd64 ."
+
+[tasks."build:linux-arm64"]
+description = "Build for Linux arm64"
+run = "CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o dist/twMQTTAgent-linux-arm64 ."
+
+[tasks."build:windows-amd64"]
+description = "Build for Windows amd64"
+run = "CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o dist/twMQTTAgent-windows-amd64.exe ."
+
+# macOS packaging, signing, and notarization (requires Apple Developer credentials).
+[tasks."pkg:mac"]
+description = "Build, sign, and notarize macOS Universal Binary"
+run = "bash scripts/build-mac.sh"
