@@ -13,8 +13,9 @@ Dear AI Assistant, please generate the complete project structure including Go s
 - **Metrics Library:** Use `github.com/shirou/gopsutil/v4` (specifically `cpu`, `load`, `mem`, `net`, and `process` packages).
 - **MQTT Library:** Use `github.com/eclipse/paho.mqtt.golang`.
 - **Target OS:** Must support cross-compilation for Windows, Linux, and macOS (`CGO_ENABLED=0` where applicable).
-- **CLI Flags:** Standard flags for `--broker`, `--client-id`, `--topic`, `--interval`, `--user`, and `--password`.
-- **Payload:** High-fidelity JSON payload matching TWSNMP data structures (specifically matching the `twBlueScan` monitor format).
+- **CLI Flags:** Standard flags for `--broker`, `--client-id`, `--topic`, `--interval`, `--if-interval`, `--arp-interval`, `--user`, and `--password`.
+- **Payload:** High-fidelity JSON payload matching TWSNMP data structures.
+
 
 ---
 
@@ -71,3 +72,48 @@ The script must handle:
   "rx_speed": 0.30,
   "process": 120
 }
+```
+
+### 6. Interface Statistics JSON Payload Format (Topic: `<topic>/IF/<hostname>`)
+Published when `--if-interval` is set to a non-zero value.
+```json
+{
+  "time": "2026-07-02T05:28:08+09:00",
+  "host": "my-pc-name",
+  "interfaces": [
+    {
+      "index": 1,
+      "name": "eth0",
+      "mtu": 1500,
+      "mac": "00:11:22:33:44:55",
+      "status": "up",
+      "addrs": ["192.168.1.100/24"],
+      "bytes_recv": 2048,
+      "bytes_sent": 1024,
+      "packets_recv": 20,
+      "packets_sent": 15,
+      "err_in": 0,
+      "err_out": 0,
+      "drop_in": 0,
+      "drop_out": 0
+    }
+  ]
+}
+```
+
+### 7. ARP Table JSON Payload Format (Topic: `<topic>/Arp/<hostname>`)
+Published when `--arp-interval` is set to a non-zero value.
+```json
+{
+  "time": "2026-07-02T05:28:08+09:00",
+  "host": "my-pc-name",
+  "arp": [
+    {
+      "ip": "192.168.1.1",
+      "mac": "00:11:22:33:44:55",
+      "interface": "eth0",
+      "type": "dynamic"
+    }
+  ]
+}
+```

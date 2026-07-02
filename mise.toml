@@ -5,9 +5,9 @@ go = "1.26"
 
 # Run the agent locally for testing.
 # Requires a running MQTT broker (e.g., mosquitto on localhost:1883).
-[tasks.run]
+[tasks.dev]
 description = "Run twMQTTAgent locally for testing"
-run = "go run . --broker tcp://localhost:1883 --interval 10"
+run = "go run . --broker tcp://localhost:1883 --interval 10 --if-interval 60 --arp-interval 60"
 
 # Build the binary for the current host architecture.
 [tasks."build:local"]
