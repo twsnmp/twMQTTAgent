@@ -6,61 +6,84 @@
 
 ---
 
-## 🤖 AI Agent Instruction: Implementation Specification
+## Features
 
-Dear AI Assistant, please generate the complete project structure including Go source code, `mise` configuration (`mise.toml`), task scripts, and GitHub Actions workflow based on the following detailed specifications.
+- **System Metrics Monitoring:** Gathers real-time performance indicators:
+  - CPU usage (%)
+  - Memory usage (%)
+  - Load average
+  - Network Traffic (Sent/Received bytes, Tx/Rx speed)
+  - Active process count
+- **Network Interface Statistics:** Gathers detailed adapter statistics (MTU, MAC address, operational status, errors, drops, packets sent/received) when `-if-interval` is set.
+- **ARP Table Monitoring:** Periodically dumps the ARP table when `-arp-interval` is set.
+- **MQTT Integration:** Publishes all collected telemetry data as JSON payloads to a specified MQTT broker.
+- **Cross-Platform:** Works on Windows, Linux, and macOS.
 
-### 1. Core Go Application Requirements
-- **Language:** Go (Golang) 1.21+
-- **Metrics Library:** Use `github.com/shirou/gopsutil/v4` (specifically `cpu`, `load`, `mem`, `net`, and `process` packages).
-- **MQTT Library:** Use `github.com/eclipse/paho.mqtt.golang`.
-- **Target OS:** Must support cross-compilation for Windows, Linux, and macOS (`CGO_ENABLED=0` where applicable).
-- **CLI Flags:** Standard flags for `--broker`, `--client-id`, `--topic`, `--interval`, `--if-interval`, `--arp-interval`, `--user`, and `--password`.
-- **Payload:** High-fidelity JSON payload matching TWSNMP data structures.
+## Configuration & Usage
 
+`twMQTTAgent` is configured using command-line flags.
 
----
+### CLI Flags
 
-### 2. Environment & Task Management (`mise.toml`)
-Please generate a `mise.toml` file to manage the development environment and build tasks.
+| Flag | Default | Description |
+|---|---|---|
+| `-broker` | `tcp://localhost:1883` | MQTT broker URL (e.g., `tcp://192.168.1.1:1883`) |
+| `-client-id` | `twMQTTAgent` | MQTT client ID |
+| `-topic` | `twMQTTAgent` | Base MQTT topic prefix. The hostname and message type are appended (e.g., `<topic>/Monitor/<hostname>`) |
+| `-interval` | `30` | Publish interval for system metrics (Monitor) in seconds |
+| `-if-interval` | `0` | Publish interval for interface stats (IF) in seconds (`0` to disable) |
+| `-arp-interval` | `0` | Publish interval for ARP table (Arp) in seconds (`0` to disable) |
+| `-user` | | MQTT username (optional) |
+| `-password` | | MQTT password (optional) |
+| `-hostname` | | Hostname used in topic and payload (defaults to system hostname if empty) |
 
-- **Tools:**
-  - `go` (latest 1.21+ or 1.22+)
-- **Tasks (`[tasks]`):**
-  - `run`: Runs the agent locally for testing.
-  - `build:local`: Builds the binary for the current local host architecture.
-  - `build:all`: Runs all cross-compilation tasks.
-  - `pkg:mac`: Triggers the local macOS packaging, signing, and notarization script.
+### Running the Agent
 
----
+```bash
+# Basic usage sending metrics every 60 seconds
+./twMQTTAgent -broker tcp://192.168.1.50:1883 -topic myhome/monitor -interval 60
 
-### 3. CI/CD & Release: GitHub Actions (`.github/workflows/release.yml`)
-Please generate a GitHub Actions workflow file that triggers when a new Git tag (e.g., `v*`) is pushed.
-
-- **Jobs & Matrix:**
-  - Must compile and release binaries for **Windows (amd64)** and **Linux (amd64, arm64)**.
-  - **Output Artifacts:** `twMQTTAgent-windows-amd64.exe`, `twMQTTAgent-linux-amd64`, `twMQTTAgent-linux-arm64`.
-  - **Release:** Automatically create a GitHub Release and upload these assets using standard action steps (e.g., `softprops/action-gh-release`).
-
----
-
-### 4. Local macOS Packaging, Signing & Notarization Script (`scripts/build-mac.sh`)
-Since macOS signing and notarization require Apple Developer certificates and external API communication, this process must be written into a local bash script executed via `mise run pkg:mac`. 
-
-The script must handle:
-1. **Compilation:** Build a Universal Binary (or separate `amd64`/`arm64` targets) for macOS.
-2. **Packaging:** Create a `.dmg` or `.pkg` wrapper if necessary, or prepare the app bundle.
-3. **Signing (`codesign`):** - Use `codesign --force --options runtime --sign "Developer ID Application: YOUR_NAME (TEAM_ID)" ./twMQTTAgent-mac`
-4. **Notarization (`xcrun notarytool`):**
-   - Compress the binary into a `.zip` file.
-   - Submit via `xcrun notarytool submit` utilizing environment variables for credentials (`APPLE_ID`, `APPLE_PASSWORD`, `TEAM_ID`).
-5. **Stapling (`xcrun stapler`):** Staple the notarization ticket to the application/package.
-
-*Note: Provide the script with placeholders for environment variables so it can be executed safely on a local Mac.*
+# Running with interface and ARP monitoring enabled
+./twMQTTAgent -broker tcp://192.168.1.50:1883 -if-interval 300 -arp-interval 600
+```
 
 ---
 
-### 5. Expected JSON Payload Format
+## Development & Build
+
+This project uses `mise` for tool versioning and task runner workflows.
+
+### Prerequisites
+- Go 1.21+
+
+### Build Commands
+
+Using `go` toolchain directly:
+```bash
+# Build for local platform
+go build -o twMQTTAgent
+```
+
+Using `mise`:
+```bash
+# Run locally for testing
+mise run run
+
+# Build for current host architecture
+mise run build:local
+
+# Cross-compile for Windows, Linux, and macOS
+mise run build:all
+
+# Package, sign, and notarize for macOS
+mise run pkg:mac
+```
+
+---
+
+## JSON Payload Formats
+
+### System Metrics (Topic: `<topic>/Monitor/<hostname>`)
 ```json
 {
   "time": "2026-07-02T05:28:08+09:00",
@@ -76,8 +99,7 @@ The script must handle:
 }
 ```
 
-### 6. Interface Statistics JSON Payload Format (Topic: `<topic>/IF/<hostname>`)
-Published when `--if-interval` is set to a non-zero value.
+### Interface Statistics (Topic: `<topic>/IF/<hostname>`)
 ```json
 {
   "time": "2026-07-02T05:28:08+09:00",
@@ -103,8 +125,7 @@ Published when `--if-interval` is set to a non-zero value.
 }
 ```
 
-### 7. ARP Table JSON Payload Format (Topic: `<topic>/Arp/<hostname>`)
-Published when `--arp-interval` is set to a non-zero value.
+### ARP Table (Topic: `<topic>/Arp/<hostname>`)
 ```json
 {
   "time": "2026-07-02T05:28:08+09:00",
@@ -119,3 +140,9 @@ Published when `--arp-interval` is set to a non-zero value.
   ]
 }
 ```
+
+---
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
