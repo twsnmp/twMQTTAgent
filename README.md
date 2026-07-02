@@ -74,11 +74,8 @@ mise run run
 # Build for current host architecture
 mise run build:local
 
-# Cross-compile for Windows, Linux, and macOS
+# Cross-compile for Windows and Linux
 mise run build:all
-
-# Package, sign, and notarize for macOS
-mise run pkg:mac
 ```
 
 ---

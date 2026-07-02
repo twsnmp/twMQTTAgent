@@ -20,14 +20,27 @@ jobs:
           - goos: windows
             goarch: amd64
             output: twMQTTAgent-windows-amd64.exe
+            archive: twMQTTAgent-windows-amd64.zip
 
           - goos: linux
             goarch: amd64
             output: twMQTTAgent-linux-amd64
+            archive: twMQTTAgent-linux-amd64.tar.gz
 
           - goos: linux
             goarch: arm64
             output: twMQTTAgent-linux-arm64
+            archive: twMQTTAgent-linux-arm64.tar.gz
+
+          - goos: darwin
+            goarch: amd64
+            output: twMQTTAgent-darwin-amd64
+            archive: twMQTTAgent-darwin-amd64.tar.gz
+
+          - goos: darwin
+            goarch: arm64
+            output: twMQTTAgent-darwin-arm64
+            archive: twMQTTAgent-darwin-arm64.tar.gz
 
     steps:
       - name: Checkout source
@@ -46,11 +59,19 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: go build -trimpath -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o ${{ matrix.output }} .
 
+      - name: Create Archive
+        run: |
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip -j ${{ matrix.archive }} ${{ matrix.output }}
+          else
+            tar -czf ${{ matrix.archive }} ${{ matrix.output }}
+          fi
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.output }}
-          path: ${{ matrix.output }}
+          name: ${{ matrix.archive }}
+          path: ${{ matrix.archive }}
 
   release:
     name: Create GitHub Release

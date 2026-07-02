@@ -31,7 +31,3 @@ run = "CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o dist/twMQTTAgent-linux-
 description = "Build for Windows amd64"
 run = "CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o dist/twMQTTAgent-windows-amd64.exe ."
 
-# macOS packaging, signing, and notarization (requires Apple Developer credentials).
-[tasks."pkg:mac"]
-description = "Build, sign, and notarize macOS Universal Binary"
-run = "bash scripts/build-mac.sh"

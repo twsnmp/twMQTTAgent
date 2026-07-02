@@ -74,11 +74,8 @@ mise run run
 # 現在のホストアーキテクチャ向けにビルド
 mise run build:local
 
-# Windows、Linux、macOS 向けにクロスコンパイル
+# Windows、Linux 向けにクロスコンパイル
 mise run build:all
-
-# macOS 向けのパッケージング、署名、および公証
-mise run pkg:mac
 ```
 
 ---
