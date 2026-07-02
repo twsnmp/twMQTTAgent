@@ -2,6 +2,8 @@
 
 `twMQTTAgent` is a lightweight, cross-platform system monitoring agent written in Go. It collects system metrics (CPU, Memory, Load, Network, Processes) and publishes them to an MQTT broker in JSON format. It is designed as a modern extension for the **TWSNMP** series.
 
+[日本語の説明](./README_ja.md)
+
 ---
 
 ## 🤖 AI Agent Instruction: Implementation Specification
